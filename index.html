@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>CringeBox - Meme Soundboard</title>
+
+    <!-- PWA & Mobile App Meta Tags -->
+    <meta name="theme-color" content="#0c0e12">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="CringeBox">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="manifest" href="manifest.webmanifest">
+    <!-- When you supply PNG icons, add: <link rel="apple-touch-icon" href="icons/apple-touch-icon.png"> -->
+
+    <!-- Libraries (versions pinned so the service worker can cache them for offline use) -->
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7.8.6/dist/wavesurfer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/wavesurfer.js@7.8.6/dist/plugins/regions.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+
+    <style>
+        :root {
+            --bg: #f6f7f9; --surface: #ffffff; --surface2: #eef0f3; --border: #dde1e7;
+            --text: #14171c; --muted: #6b7380;
+        }
+        html.dark {
+            --bg: #0c0e12; --surface: #15181e; --surface2: #1e222a; --border: #2b303a;
+            --text: #e9ebef; --muted: #8b93a1;
+        }
+        html, body { background: var(--bg); color: var(--text); }
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh; min-height: 100dvh;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .muted { color: var(--muted); }
+        .app-header { background: color-mix(in srgb, var(--surface) 85%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); padding-top: env(safe-area-inset-top); }
+
+        /* ---------- Buttons / inputs ---------- */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; padding: .55rem .9rem; border-radius: .75rem; font-size: .8125rem; font-weight: 600; background: var(--surface2); color: var(--text); border: 1px solid var(--border); cursor: pointer; transition: filter .12s, transform .08s; user-select: none; white-space: nowrap; }
+        .btn:hover { filter: brightness(1.1); }
+        .btn:active { transform: scale(.97); }
+        .btn:disabled { opacity: .5; cursor: not-allowed; }
+        .btn-primary { background: var(--text); color: var(--bg); border-color: transparent; }
+        .btn-danger { color: #ef4444; }
+        .btn-sm { padding: .4rem .6rem; font-size: .75rem; border-radius: .6rem; }
+        .btn-icon { padding: .5rem; border-radius: .75rem; }
+        .input { width: 100%; padding: .6rem .8rem; border-radius: .75rem; background: var(--bg); color: var(--text); border: 1px solid var(--border); font-size: 16px; outline: none; }
+        .input:focus { border-color: var(--muted); }
+        @media (min-width: 640px) { .input { font-size: .875rem; } }
+        .label { font-size: .6875rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--muted); }
+        input[type=range] { accent-color: var(--text); }
+
+        /* ---------- Pads ---------- */
+        .pad { position: relative; aspect-ratio: 1; border-radius: 1.25rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .45rem; padding: .6rem; overflow: hidden; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: transform .08s ease, filter .15s ease; }
+        .pad:active { transform: scale(.95); }
+        .pad.filled { background: var(--pad); color: var(--pad-fg); box-shadow: inset 0 -6px 0 rgba(0,0,0,.18), 0 8px 20px -10px var(--pad); }
+        .pad.filled:hover { filter: brightness(1.06); }
+        .pad.empty { border: 2px dashed var(--border); color: var(--muted); background: transparent; }
+        .pad.empty:hover { border-color: var(--muted); color: var(--text); }
+        .pad svg.pad-icon { width: 34%; height: 34%; stroke-width: 2; }
+        .pad-name { font-size: .78rem; font-weight: 700; text-align: center; line-height: 1.15; max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+        @media (min-width: 640px) { .pad-name { font-size: .95rem; } }
+        .pad-sub { font-size: .7rem; font-weight: 600; }
+        .pad-key { position: absolute; top: .45rem; left: .5rem; font-size: .65rem; font-weight: 800; font-family: ui-monospace, Menlo, monospace; opacity: .65; padding: .05rem .35rem; border-radius: .35rem; background: rgba(0,0,0,.14); }
+        .pad.empty .pad-key { background: var(--surface2); }
+        @media (hover: none) { .pad-key { display: none; } }
+        .pad-menu { position: absolute; top: .3rem; right: .3rem; padding: .3rem; border-radius: .6rem; background: rgba(0,0,0,.14); color: inherit; opacity: .8; }
+        .pad-menu:hover { opacity: 1; background: rgba(0,0,0,.28); }
+        .pad-menu svg { width: 1rem; height: 1rem; display: block; }
+        .pad-progress { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: var(--pad-fg); opacity: .6; transform-origin: left; }
+        .pad.playing .pad-progress { display: block; animation: padfill linear forwards; }
+        .pad.playing { filter: brightness(1.12); }
+        @keyframes padfill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+        /* ---------- Modals ---------- */
+        .modal-backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(3px); }
+        .sheet { background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 25px 60px -15px rgba(0,0,0,.6); }
+        .modal:not(.hidden) .sheet { animation: sheetIn .18s cubic-bezier(.16,1,.3,1); }
+        @keyframes sheetIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+        .swatch { width: 1.9rem; height: 1.9rem; border-radius: 9999px; border: 2px solid transparent; cursor: pointer; flex-shrink: 0; }
+        .swatch.sel { border-color: var(--text); box-shadow: inset 0 0 0 2px var(--surface); }
+        .icon-opt { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: .65rem; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+        .icon-opt:hover { background: var(--surface2); }
+        .icon-opt.sel { background: var(--text); color: var(--bg); border-color: transparent; }
+        .icon-opt svg { width: 1.2rem; height: 1.2rem; }
+
+        /* Waveform + trim handles */
+        #edit-wave ::part(scroll) { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+        #edit-wave ::part(region-handle-left), #edit-wave ::part(region-handle-right) { width: 7px !important; border: 0 !important; background: #fbbf24 !important; opacity: 1 !important; border-radius: 4px; }
+
+        /* Arrange (drag to reorder) mode */
+        .arranging .pad { touch-action: none; cursor: grab; animation: wiggle .32s ease-in-out infinite alternate; }
+        .arranging .pad:nth-child(2n) { animation-delay: -.16s; }
+        .arranging .pad:active { transform: none; }
+        .arranging .pad-menu { display: none; }
+        .pad.drag-placeholder { opacity: .25; animation: none !important; }
+        .pad-ghost { position: fixed; z-index: 45; pointer-events: none; margin: 0; scale: 1.06; animation: none !important; box-shadow: 0 22px 45px -12px rgba(0,0,0,.55); }
+        @keyframes wiggle { from { rotate: -1.2deg; } to { rotate: 1.2deg; } }
+
+        #toast { transition: opacity .2s, transform .2s; }
+        #stop-btn { transition: all .2s; }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="app-header sticky top-0 z-20">
+        <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <img src="icons/icon.svg" alt="" class="w-8 h-8 rounded-lg shrink-0">
+                <h1 class="text-lg font-bold tracking-tight">CringeBox</h1>
+            </div>
+            <div class="flex items-center gap-1.5 relative">
+                <button id="pwa-install-btn" type="button" class="btn btn-sm btn-primary hidden"><i data-icon="Download" data-size="14"></i><span class="hidden sm:inline">Install</span></button>
+                <button id="arrange-btn" type="button" class="btn btn-sm" title="Drag pads to reorder"><i data-icon="Move" data-size="14"></i><span id="arrange-label" class="hidden sm:inline">Arrange</span></button>
+                <button id="add-pad-btn" type="button" class="btn btn-sm" title="Add an empty pad"><i data-icon="Plus" data-size="14"></i>Pad</button>
+                <button id="board-menu-btn" type="button" class="btn btn-sm btn-icon" title="Board menu"><i data-icon="Ellipsis" data-size="18"></i></button>
+                <button id="theme-toggle" type="button" class="btn btn-sm btn-icon" title="Toggle theme"><i data-icon="SunMoon" data-size="18"></i></button>
+
+                <div id="board-menu" class="hidden absolute right-0 top-full mt-2 w-60 rounded-xl p-1.5 sheet z-30">
+                    <button id="m-maxall" type="button" class="btn w-full !justify-start !border-0 !bg-transparent"><i data-icon="Volume2" data-size="16"></i>Max volume of all pads</button>
+                    <button id="m-level" type="button" class="btn w-full !justify-start !border-0 !bg-transparent"><i data-icon="SlidersHorizontal" data-size="16"></i>Level volume of all pads</button>
+                    <button id="m-export" type="button" class="btn w-full !justify-start !border-0 !bg-transparent"><i data-icon="Upload" data-size="16"></i>Export board</button>
+                    <button id="m-import" type="button" class="btn w-full !justify-start !border-0 !bg-transparent"><i data-icon="Download" data-size="16"></i>Import board / pads</button>
+                    <button id="m-clean" type="button" class="btn w-full !justify-start !border-0 !bg-transparent"><i data-icon="Eraser" data-size="16"></i>Remove empty pads</button>
+                    <button id="m-reset" type="button" class="btn btn-danger w-full !justify-start !border-0 !bg-transparent"><i data-icon="Trash2" data-size="16"></i>Clear whole board</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Board -->
+    <main class="max-w-2xl mx-auto px-4 pt-4 pb-32">
+        <div id="grid" class="grid grid-cols-3 gap-3 sm:gap-4"></div>
+        <p id="hint" class="muted text-center text-xs mt-6 leading-relaxed">
+            Tap a pad to play &middot; long-press (or right-click, or the <b>&hellip;</b> button) to edit &amp; trim<br>
+            <span class="hidden sm:inline">Keys on the pads play them &middot; <b>Space</b> / <b>Esc</b> stops</span>
+        </p>
+    </main>
+
+    <!-- Global Stop (only visible while a pad is playing) -->
+    <button id="stop-btn" type="button" class="fixed left-1/2 -translate-x-1/2 bottom-6 z-30 translate-y-24 opacity-0 pointer-events-none flex items-center gap-2 px-6 py-3 rounded-2xl bg-red-500 hover:bg-red-400 text-white font-bold shadow-2xl shadow-red-500/30" style="margin-bottom: env(safe-area-inset-bottom)">
+        <i data-icon="Square" data-size="16"></i> Stop
+    </button>
+
+    <!-- Hidden file inputs -->
+    <input type="file" id="source-file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.webm,.opus" multiple class="hidden">
+    <input type="file" id="import-file" accept=".cringebox,.json,application/json" class="hidden">
+
+    <!-- Add / Replace audio modal -->
+    <div id="source-modal" class="modal hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+        <div class="modal-backdrop absolute inset-0" data-backdrop></div>
+        <div class="sheet relative w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 id="source-title" class="font-bold">Add audio</h3>
+                <button type="button" class="btn btn-sm btn-icon" data-close><i data-icon="X" data-size="16"></i></button>
+            </div>
+            <button id="source-pick" type="button" class="btn btn-primary w-full !py-3"><i data-icon="FolderOpen" data-size="18"></i>Choose audio file(s) from device</button>
+            <p class="muted text-xs -mt-2">Tip: select several files at once to fill several pads.</p>
+            <div class="flex items-center gap-3 muted text-xs"><div class="flex-1 h-px" style="background:var(--border)"></div>or paste a link<div class="flex-1 h-px" style="background:var(--border)"></div></div>
+            <div class="flex gap-2">
+                <input id="source-url" type="url" inputmode="url" class="input" placeholder="https://.../sound.mp3" autocomplete="off">
+                <button id="source-load" type="button" class="btn shrink-0">Load</button>
+            </div>
+            <p id="source-status" class="hidden text-xs rounded-lg px-3 py-2"></p>
+            <button id="source-remove" type="button" class="btn btn-danger btn-sm w-full hidden"><i data-icon="Trash2" data-size="14"></i>Remove this empty pad</button>
+        </div>
+    </div>
+
+    <!-- Edit / Trim modal -->
+    <div id="edit-modal" class="modal hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
+        <div class="modal-backdrop absolute inset-0" data-backdrop></div>
+        <div class="sheet relative w-full max-w-xl rounded-t-2xl sm:rounded-2xl max-h-[94vh] flex flex-col">
+            <div class="overflow-y-auto p-4 sm:p-5 space-y-5">
+                <div class="flex items-center gap-3">
+                    <div id="edit-preview" class="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"></div>
+                    <input id="edit-name" type="text" maxlength="40" class="input" placeholder="Pad name" autocomplete="off">
+                    <button type="button" class="btn btn-sm btn-icon shrink-0" data-close title="Close"><i data-icon="X" data-size="16"></i></button>
+                </div>
+
+                <!-- Trim editor -->
+                <section class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="label">Trim</span>
+                        <span class="muted text-xs font-mono">Length <span id="edit-len">0.000s</span></span>
+                    </div>
+                    <div id="edit-wave-card" class="rounded-xl p-2" style="background:var(--bg); border:1px solid var(--border)">
+                        <div id="edit-wave" class="w-full"></div>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <i data-icon="ZoomIn" data-size="16" class="muted"></i>
+                        <input id="edit-zoom" type="range" min="0" max="100" value="0" class="w-full">
+                        <span id="edit-zoom-label" class="muted text-xs font-mono w-10 text-right">1.0x</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="rounded-xl p-2.5" style="background:var(--bg); border:1px solid var(--border)">
+                            <div class="label mb-1.5">Start</div>
+                            <div class="flex items-center justify-between gap-1">
+                                <button id="start-minus" type="button" class="btn btn-sm !px-2 font-mono">-10ms</button>
+                                <span id="edit-start" class="font-mono text-sm font-bold">0.000s</span>
+                                <button id="start-plus" type="button" class="btn btn-sm !px-2 font-mono">+10ms</button>
+                            </div>
+                        </div>
+                        <div class="rounded-xl p-2.5" style="background:var(--bg); border:1px solid var(--border)">
+                            <div class="label mb-1.5">End</div>
+                            <div class="flex items-center justify-between gap-1">
+                                <button id="end-minus" type="button" class="btn btn-sm !px-2 font-mono">-10ms</button>
+                                <span id="edit-end" class="font-mono text-sm font-bold">0.000s</span>
+                                <button id="end-plus" type="button" class="btn btn-sm !px-2 font-mono">+10ms</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <button id="btn-preview" type="button" class="btn btn-primary flex-1 min-w-[120px]"><i data-icon="Play" data-size="16"></i><span id="btn-preview-text">Preview</span></button>
+                        <button id="btn-snap" type="button" class="btn flex-1 min-w-[140px]" title="Move the start handle to the first audible sound"><i data-icon="ArrowRightToLine" data-size="16"></i>Snap start to sound</button>
+                        <button id="btn-trim-end" type="button" class="btn" title="Move the end handle to just after the last audible sound"><i data-icon="ArrowLeftToLine" data-size="16"></i>Trim end silence</button>
+                        <button id="btn-reset-trim" type="button" class="btn btn-icon" title="Reset to the full clip"><i data-icon="RotateCcw" data-size="16"></i></button>
+                    </div>
+                </section>
+
+                <!-- Volume -->
+                <section class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="label">Volume</span>
+                        <span id="edit-clip" class="hidden text-xs font-semibold text-red-500">Clipping - lower it or press Max</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <i data-icon="Volume2" data-size="16" class="muted"></i>
+                        <input id="edit-vol" type="range" min="-24" max="24" step="0.5" value="0" class="w-full">
+                        <span id="edit-vol-label" class="muted text-xs font-mono w-16 text-right shrink-0">0.0 dB</span>
+                        <button id="edit-vol-max" type="button" class="btn btn-sm shrink-0" title="Loudest possible without clipping">Max</button>
+                        <button id="edit-vol-reset" type="button" class="btn btn-sm btn-icon shrink-0" title="Reset to 0 dB"><i data-icon="RotateCcw" data-size="14"></i></button>
+                    </div>
+                </section>
+
+                <!-- Color -->
+                <section class="space-y-2">
+                    <span class="label">Color</span>
+                    <div id="edit-colors" class="flex flex-wrap items-center gap-2"></div>
+                </section>
+
+                <!-- Icon -->
+                <section class="space-y-2">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="label">Icon</span>
+                        <input id="edit-icon-search" type="search" class="input !py-1.5 !w-44" placeholder="Search icons..." autocomplete="off">
+                    </div>
+                    <div id="edit-icons" class="grid grid-cols-6 sm:grid-cols-8 gap-1.5 max-h-44 overflow-y-auto pr-1"></div>
+                </section>
+
+                <!-- Pad actions -->
+                <section class="flex flex-wrap gap-2 pt-1" style="border-top:1px solid var(--border); padding-top:1rem">
+                    <button id="act-duplicate" type="button" class="btn btn-sm"><i data-icon="Copy" data-size="14"></i>Duplicate</button>
+                    <button id="act-replace" type="button" class="btn btn-sm"><i data-icon="Replace" data-size="14"></i>Replace audio</button>
+                    <button id="act-export" type="button" class="btn btn-sm"><i data-icon="Upload" data-size="14"></i>Export pad</button>
+                    <button id="act-clear" type="button" class="btn btn-sm btn-danger"><i data-icon="Eraser" data-size="14"></i>Clear</button>
+                    <button id="act-remove" type="button" class="btn btn-sm btn-danger"><i data-icon="Trash2" data-size="14"></i>Remove pad</button>
+                </section>
+            </div>
+            <div class="p-3 sm:p-4 flex gap-2 justify-end" style="border-top:1px solid var(--border)">
+                <button id="edit-cancel" type="button" class="btn flex-1 sm:flex-initial" data-close>Cancel</button>
+                <button id="edit-save" type="button" class="btn btn-primary flex-1 sm:flex-initial sm:min-w-[120px]">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic dialog -->
+    <div id="dialog-modal" class="modal hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" data-backdrop></div>
+        <div class="sheet relative w-full max-w-sm rounded-2xl p-5 space-y-3">
+            <h3 id="dialog-title" class="font-bold"></h3>
+            <p id="dialog-text" class="muted text-sm leading-relaxed whitespace-pre-line"></p>
+            <div id="dialog-buttons" class="flex flex-wrap gap-2 justify-end pt-1"></div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[70] max-w-[90vw] px-4 py-2.5 rounded-xl text-sm font-medium shadow-xl opacity-0 pointer-events-none translate-y-2" style="background:var(--text); color:var(--bg)"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

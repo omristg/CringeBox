@@ -1,0 +1,19 @@
+{
+  "name": "CringeBox",
+  "short_name": "CringeBox",
+  "description": "A meme soundboard with precise audio trimming.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c0e12",
+  "theme_color": "#0c0e12",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
