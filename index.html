@@ -90,6 +90,10 @@
         .icon-opt.sel { background: var(--text); color: var(--bg); border-color: transparent; }
         .icon-opt svg { width: 1.2rem; height: 1.2rem; }
 
+        /* Scrubbable time readouts */
+        .scrub { flex: 1; text-align: center; cursor: ew-resize; touch-action: none; user-select: none; -webkit-user-select: none; padding: 6px 4px; border-radius: 8px; border: 1px dashed var(--border); }
+        .scrub:hover { border-color: var(--muted); }
+        .scrub.active { border-style: solid; border-color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
         /* Waveform + trim handles */
         #edit-wave ::part(scroll) { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
         #edit-wave ::part(region-handle-left), #edit-wave ::part(region-handle-right) { width: 7px !important; border: 0 !important; background: #fbbf24 !important; opacity: 1 !important; border-radius: 4px; }
@@ -204,7 +208,7 @@
                             <div class="label mb-1.5">Start</div>
                             <div class="flex items-center justify-between gap-1">
                                 <button id="start-minus" type="button" class="btn btn-sm !px-2 font-mono">-10ms</button>
-                                <span id="edit-start" class="font-mono text-sm font-bold">0.000s</span>
+                                <span id="edit-start" data-scrub="start" class="scrub font-mono text-sm font-bold" title="Drag left/right to move the start (faster drag = bigger jumps)">0.000s</span>
                                 <button id="start-plus" type="button" class="btn btn-sm !px-2 font-mono">+10ms</button>
                             </div>
                         </div>
@@ -212,11 +216,13 @@
                             <div class="label mb-1.5">End</div>
                             <div class="flex items-center justify-between gap-1">
                                 <button id="end-minus" type="button" class="btn btn-sm !px-2 font-mono">-10ms</button>
-                                <span id="edit-end" class="font-mono text-sm font-bold">0.000s</span>
+                                <span id="edit-end" data-scrub="end" class="scrub font-mono text-sm font-bold" title="Drag left/right to move the end (faster drag = bigger jumps)">0.000s</span>
                                 <button id="end-plus" type="button" class="btn btn-sm !px-2 font-mono">+10ms</button>
                             </div>
                         </div>
                     </div>
+
+                    <p class="muted text-xs -mt-1">Drag the Start / End time left or right to scrub &middot; hold &plusmn;10ms to repeat</p>
 
                     <div class="flex flex-wrap gap-2">
                         <button id="btn-preview" type="button" class="btn btn-primary flex-1 min-w-[120px]"><i data-icon="Play" data-size="16"></i><span id="btn-preview-text">Preview</span></button>

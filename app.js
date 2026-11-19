@@ -1029,10 +1029,91 @@ function nudge(which, delta) {
     if (which === 'start') setRegion(clamp(ed.start + delta, 0, ed.end - MIN_CUT), ed.end);
     else setRegion(ed.start, clamp(ed.end + delta, ed.start + MIN_CUT, ed.buf.duration));
 }
-$('#start-minus').addEventListener('click', () => nudge('start', -0.01));
-$('#start-plus').addEventListener('click', () => nudge('start', 0.01));
-$('#end-minus').addEventListener('click', () => nudge('end', -0.01));
-$('#end-plus').addEventListener('click', () => nudge('end', 0.01));
+/* Keep a handle visible when the waveform is zoomed in */
+function revealTime(t) {
+    if (!ed || !ed.ws) return;
+    try {
+        const w = $('#edit-wave').clientWidth;
+        const total = ed.ws.getWrapper().scrollWidth || w;
+        const pxps = total / ed.buf.duration;
+        const x = t * pxps, scroll = ed.ws.getScroll();
+        const pad = w * 0.15;
+        if (x < scroll + pad || x > scroll + w - pad) ed.ws.setScroll(Math.max(0, x - w / 2));
+    } catch (e) { /* ignore until ready */ }
+}
+
+/* Hold a +/- button to repeat, speeding up the longer it is held */
+function holdRepeat(btn, which, dir) {
+    let timer = 0, t0 = 0;
+    const step = () => {
+        const held = performance.now() - t0;
+        const amt = held > 3000 ? 1 : held > 1500 ? 0.1 : 0.01;
+        nudge(which, dir * amt);
+        revealTime(which === 'start' ? ed.start : ed.end);
+        timer = setTimeout(step, 60);
+    };
+    const stop = () => { clearTimeout(timer); timer = 0; };
+    btn.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        t0 = performance.now();
+        nudge(which, dir * 0.01);
+        timer = setTimeout(step, 400);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+    btn.addEventListener('click', (e) => { if (e.detail === 0) nudge(which, dir * 0.01); }); // keyboard
+}
+holdRepeat($('#start-minus'), 'start', -1);
+holdRepeat($('#start-plus'), 'start', 1);
+holdRepeat($('#end-minus'), 'end', -1);
+holdRepeat($('#end-plus'), 'end', 1);
+
+/* Drag the Start / End readouts left-right to scrub the handle.
+   Slow drag = fine (2ms per px), fast drag = big jumps (scaled to clip length). */
+document.querySelectorAll('[data-scrub]').forEach(el => {
+    const which = el.dataset.scrub;
+    let lastX = 0, lastT = 0, pos = 0, active = false;
+    el.addEventListener('pointerdown', (e) => {
+        if (!ed || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        active = true;
+        lastX = e.clientX; lastT = performance.now();
+        pos = which === 'start' ? ed.start : ed.end;
+        el.classList.add('active');
+    });
+    el.addEventListener('pointermove', (e) => {
+        if (!active || !ed) return;
+        const now = performance.now();
+        const dx = e.clientX - lastX;
+        const dt = Math.max(1, now - lastT);
+        lastX = e.clientX; lastT = now;
+        if (!dx) return;
+        const speed = Math.abs(dx) / dt;                         // px per ms
+        const fine = 0.002;
+        const fast = Math.max(fine, ed.buf.duration / 300);      // ~300px of fast drag covers the whole clip
+        const k = Math.min(1, speed / 2) ** 2;
+        pos += dx * (fine + (fast - fine) * k);
+        if (which === 'start') {
+            pos = clamp(pos, 0, ed.end - MIN_CUT);
+            ed.start = pos;
+        } else {
+            pos = clamp(pos, ed.start + MIN_CUT, ed.buf.duration);
+            ed.end = pos;
+        }
+        if (ed.region) ed.region.setOptions({ start: ed.start, end: ed.end });
+        updateTimes();
+        revealTime(pos);
+    });
+    const end = () => {
+        if (!active) return;
+        active = false;
+        el.classList.remove('active');
+        refreshPeak();
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+});
 
 $('#btn-snap').addEventListener('click', () => {
     if (!ed) return;

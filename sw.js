@@ -1,7 +1,7 @@
 // CringeBox service worker: offline support.
 // Same-origin files: network-first (so updates arrive), falling back to cache when offline.
 // CDN libraries: cache-first (pinned versions never change).
-const VERSION = 'cringebox-v1';
+const VERSION = 'cringebox-v2';
 
 const SHELL = [
     './',
